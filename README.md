@@ -2,12 +2,14 @@
 
 > Automatically sync your Zotero research library to Craft with AI-powered summaries
 
-ZotCraft is a seamless integration tool that bridges your Zotero research collection with Craft's powerful note-taking environment. Enrich your literature notes with AI-generated summaries and maintain a beautifully organized research workspace.
+ZotCraft is an integration tool that bridges your Zotero research collection with Craft's note-taking environment. 
+
+Coming soon: enrich your literature notes with AI-generated summaries and maintain a beautifully organized research workspace.
 
 ## ✨ Features
 
 - 🔄 **Automatic Synchronization** - Set it and forget it with configurable auto-sync intervals
-- 🤖 **AI Enrichment** - Generate intelligent summaries and key points from abstracts
+- 🤖 **AI Enrichment** - Generate intelligent summaries and key points from abstracts (Untested!)
 - 📂 **Collection Support** - Select specific Zotero collections and target Craft collections
 - 🏷️ **Smart Tagging** - Automatically convert Zotero tags to Craft-style hashtags (#machine_learning)
 - 🎨 **Rich Formatting** - Create structured notes with metadata, abstracts, and summaries
@@ -52,7 +54,7 @@ npm run dev
 
 ### 2. Craft Setup
 
-1. Generate your **API Key**: Craft Settings → Integrations → API
+1. Generate your **API Key**: Craft → Imagine → Create new document API (you need a document with a Collection block first)
 2. Choose your target **Collection** from the dropdown
 3. (Optional) Provide a **Parent Document ID** for sub-page fallback
 
@@ -152,4 +154,4 @@ Having issues? Please [open an issue](https://github.com/feldaher/zotcraft/issue
 
 ---
 
-**Made with ❤️ for researchers and academics**
+**Made with ❤️ for students, researchers and academics**
