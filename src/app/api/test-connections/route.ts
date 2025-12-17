@@ -12,28 +12,29 @@ export async function POST(request: Request) {
             craft: false,
         };
 
-        // Test Zotero - try to fetch collections
-        if (zotero?.userId && zotero?.apiKey) {
-            try {
-                const zoteroClient = new ZoteroClient(zotero);
-                await zoteroClient.getCollections();
-                result.zotero = true;
-            } catch (e: any) {
-                console.error('Zotero test failed:', e.message);
-            }
+        // Test Zotero
+        try {
+            const zoteroClient = new ZoteroClient(zotero);
+            // Try to fetch collections - this validates API key and user ID
+            await zoteroClient.getCollections();
+            result.zotero = true;
+        } catch (e: any) {
+            console.error('Zotero test failed:', e.message);
+            result.zotero = false;
         }
 
-        // Test Craft - try to fetch collections
-        if (craft?.apiKey) {
-            try {
-                const craftClient = new CraftClient(craft);
-                await craftClient.getCollections();
-                result.craft = true;
-            } catch (e: any) {
-                console.error('Craft test failed:', e.message);
-            }
+        // Test Craft
+        try {
+            const craftClient = new CraftClient(craft);
+            // Try to fetch collections - this validates API key
+            await craftClient.getCollections();
+            result.craft = true;
+        } catch (e: any) {
+            console.error('Craft test failed:', e.message);
+            result.craft = false;
         }
 
+        console.log('Test results:', result);
         return NextResponse.json(result);
     } catch (error: any) {
         console.error('Test connections error:', error.message);
