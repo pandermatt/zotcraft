@@ -16,6 +16,7 @@ export interface ZoteroItemData {
     name?: string;
   }>;
   date?: string;
+  dateAdded?: string;
   publicationTitle?: string; // Journal
   url?: string;
   DOI?: string;

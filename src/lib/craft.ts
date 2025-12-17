@@ -146,10 +146,31 @@ export class CraftClient {
         }
     }
 
+    async getCollectionSchema(collectionId: string): Promise<any> {
+        try {
+            // Fetch schema with default format (json-schema-items is default but we want the edit schema structure to see display names)
+            // Actually the docs say format='schema' returns structure with names/keys
+            const response = await fetch(`${CRAFT_API_BASE}/collections/${collectionId}/schema?format=schema`, {
+                headers: this.getHeaders(),
+            });
+
+            if (!response.ok) {
+                console.warn(`Failed to fetch collection schema: ${response.statusText}`);
+                return null;
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching collection schema:', error);
+            return null;
+        }
+    }
+
     async createCollectionItem(
         collectionId: string,
         title: string,
-        contentMarkdown: string
+        contentMarkdown: string,
+        properties: Record<string, any> = {}
     ): Promise<string> {
         try {
             // Step 1: Create the item in the collection
@@ -160,7 +181,7 @@ export class CraftClient {
                     items: [
                         {
                             title: title,
-                            properties: {}
+                            properties: properties
                         }
                     ]
                 })
