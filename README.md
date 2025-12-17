@@ -135,7 +135,6 @@ MIT License - feel free to use this project for your research workflow!
 
 - [Zotero](https://www.zotero.org/) for the powerful research management platform
 - [Craft](https://www.craft.do/) for the beautiful note-taking experience
-- OpenAI for AI enrichment capabilities
 
 ## 📧 Support
 
