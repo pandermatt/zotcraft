@@ -258,7 +258,12 @@ export default function Home() {
       <div className="max-w-4xl mx-auto space-y-8">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Zotero to Craft Sync</h1>
-          <p className="text-gray-500 mt-2">Automated literature notes creation with AI summarization.</p>
+          <p className="text-gray-500 mt-2">
+            Automated literature notes creation with AI summarization. Designed for the{' '}
+            <a href="https://donkeys-melt-ig1.craft.me/Zotcraft-template" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
+              ZotCraft Template
+            </a>.
+          </p>
         </header>
 
         <div className="grid gap-6 md:grid-cols-2">
