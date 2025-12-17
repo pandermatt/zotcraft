@@ -1,21 +1,19 @@
 import { NextResponse } from 'next/server';
 import { ZoteroClient } from '@/lib/zotero';
 import { CraftClient } from '@/lib/craft';
-import { getSyncState, markAsProcessed } from '@/lib/state';
 import { ZoteroConfig } from '@/types/zotero';
 import { CraftConfig } from '@/types/craft';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { config, maxItems = 10, skipProcessed = true } = body;
+        const { config, maxItems = 10 } = body;
         const { zotero, craft } = config as {
             zotero: ZoteroConfig;
             craft: CraftConfig;
         };
 
         const logs: Array<{ title: string; status: string; details?: string }> = [];
-        const state = await getSyncState();
 
         const zoteroClient = new ZoteroClient(zotero);
         const craftClient = new CraftClient(craft);
@@ -26,13 +24,16 @@ export async function POST(request: Request) {
         for (const item of items) {
             const itemTitle = item.data.title || 'Untitled';
 
-            if (skipProcessed && state.processedKeys.includes(item.key)) {
-                logs.push({ title: itemTitle, status: 'skipped', details: 'Already processed' });
-                continue;
-            }
-
             try {
-                // 2. Prepare content
+                // 2. Check if already exists in Craft
+                const exists = await craftClient.checkItemExists(craft.targetCollectionId, itemTitle);
+
+                if (exists) {
+                    logs.push({ title: itemTitle, status: 'skipped', details: 'Already exists in Craft' });
+                    continue;
+                }
+
+                // 3. Prepare content
                 const creators = ZoteroClient.formatAuthors(item.data.creators);
                 const year = ZoteroClient.extractYear(item.data.date);
                 const journal = item.data.publicationTitle || '';
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
 
                 const abstract = item.data.abstractNote || '';
 
-                // 3. Transform to Markdown
+                // 4. Transform to Markdown
                 const markdownBody = `
 **Authors:** ${creators}
 **Year:** ${year}
@@ -73,16 +74,13 @@ ${abstract || 'No abstract available.'}
 - 
 `;
 
-                // 4. Create in Craft
+                // 5. Create in Craft
                 if (craft.targetCollectionId) {
                     await craftClient.createCollectionItem(craft.targetCollectionId, itemTitle, markdownBody);
                 } else {
                     // Fallback to creating sub-page
                     await craftClient.createNote(itemTitle, markdownBody, tags);
                 }
-
-                // 5. Update State
-                await markAsProcessed(item.key);
 
                 logs.push({ title: itemTitle, status: 'created' });
             } catch (err: any) {

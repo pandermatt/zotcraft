@@ -100,6 +100,52 @@ export class CraftClient {
         }
     }
 
+    async checkItemExists(collectionId: string | undefined, title: string): Promise<boolean> {
+        try {
+            // Check in collection if collectionId provided, otherwise check in parent document
+            if (collectionId) {
+                // Get items from collection
+                const response = await fetch(`${CRAFT_API_BASE}/collections/${collectionId}/items`, {
+                    headers: this.getHeaders(),
+                });
+
+                if (!response.ok) {
+                    console.error(`Failed to fetch collection items: ${response.statusText}`);
+                    return false;
+                }
+
+                const data = await response.json();
+                const items = data.items || [];
+
+                // Check if any item has matching title
+                return items.some((item: any) => item.title?.trim() === title.trim());
+            } else if (this.config.parentDocumentId) {
+                // Get blocks from parent document
+                const response = await fetch(`${CRAFT_API_BASE}/documents/${this.config.parentDocumentId}`, {
+                    headers: this.getHeaders(),
+                });
+
+                if (!response.ok) {
+                    console.error(`Failed to fetch document: ${response.statusText}`);
+                    return false;
+                }
+
+                const data = await response.json();
+                const blocks = data.blocks || [];
+
+                // Check if any block/page has matching title (in markdown)
+                return blocks.some((block: any) =>
+                    block.type === 'page' && block.markdown?.trim() === title.trim()
+                );
+            }
+
+            return false;
+        } catch (error) {
+            console.error('Error checking item existence:', error);
+            return false; // On error, assume doesn't exist to allow creation
+        }
+    }
+
     async createCollectionItem(
         collectionId: string,
         title: string,
