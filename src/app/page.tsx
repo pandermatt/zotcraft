@@ -266,11 +266,6 @@ export default function Home() {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               Connections
-              {testResult && (
-                <span className="text-xs font-normal">
-                  (Zotero: {testResult.zotero ? '✅' : '❌'}, Craft: {testResult.craft ? '✅' : '❌'})
-                </span>
-              )}
             </h2>
 
             {/* Zotero */}

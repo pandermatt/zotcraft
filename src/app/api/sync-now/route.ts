@@ -20,6 +20,10 @@ export async function POST(request: Request) {
     const stream = new ReadableStream({
         async start(controller) {
             try {
+                // Send initial connection log immediately
+                const startLog = { title: 'System', status: 'info', details: 'Connecting to Zotero...' };
+                controller.enqueue(encoder.encode(JSON.stringify(startLog) + '\n'));
+
                 const body = await request.json();
                 const { config, maxItems = 10 } = body;
                 const { zotero, craft } = config as {
@@ -53,7 +57,14 @@ export async function POST(request: Request) {
                 // 2. Fetch items
                 let items: any[] = [];
                 try {
+                    const fetchLog = { title: 'System', status: 'info', details: `Fetching up to ${maxItems} items from Zotero...` };
+                    controller.enqueue(encoder.encode(JSON.stringify(fetchLog) + '\n'));
+
                     items = await zoteroClient.getCollectionItems(maxItems);
+
+                    const countLog = { title: 'System', status: 'success', details: `Found ${items.length} items. Processing...` };
+                    controller.enqueue(encoder.encode(JSON.stringify(countLog) + '\n'));
+
                 } catch (e: any) {
                     const log = { title: 'System', status: 'error', details: `Failed to fetch Zotero items: ${e.message}` };
                     controller.enqueue(encoder.encode(JSON.stringify(log) + '\n'));
@@ -62,6 +73,12 @@ export async function POST(request: Request) {
                 }
 
                 for (const item of items) {
+                    // Check for cancellation
+                    if (request.signal.aborted) {
+                        console.log('Sync processing aborted by client.');
+                        break;
+                    }
+
                     const itemTitle = item.data.title || 'Untitled';
 
                     try {
