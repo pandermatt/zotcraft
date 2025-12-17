@@ -19,12 +19,16 @@ export async function POST(request: Request) {
         const craftClient = new CraftClient(craft);
 
         // 1. Fetch schema if target collection is set
-        let schemaMap: Record<string, string> = {}; // Name -> Key
+        let schemaMap: Record<string, { key: string; type: string; options?: string[] }> = {}; // Name -> { key, type, options }
         if (craft.targetCollectionId) {
             const schema = await craftClient.getCollectionSchema(craft.targetCollectionId);
             if (schema && schema.properties) {
                 schema.properties.forEach((prop: any) => {
-                    schemaMap[prop.name] = prop.key;
+                    schemaMap[prop.name] = {
+                        key: prop.key,
+                        type: prop.type,
+                        options: prop.options, // For single-select or multi-select fields
+                    };
                 });
             }
         }
@@ -66,25 +70,113 @@ export async function POST(request: Request) {
                 // Map properties to Craft schema keys
                 const properties: Record<string, any> = {};
 
-                // Helper to set property if field exists in schema
+                // Helper to validate and format value based on schema type
                 const setProp = (fieldName: string, value: any) => {
-                    if (schemaMap[fieldName] && value) {
-                        properties[schemaMap[fieldName]] = value;
+                    const fieldSchema = schemaMap[fieldName];
+                    if (!fieldSchema || !value) return;
+
+                    const propKey = fieldSchema.key;
+
+                    // Handle different types
+                    if (fieldSchema.type === 'number') {
+                        const num = parseInt(String(value), 10);
+                        if (!isNaN(num)) {
+                            properties[propKey] = num;
+                        }
+                    } else if (fieldSchema.type === 'url') {
+                        // Ensure it's a string, maybe validate URL format if needed
+                        properties[propKey] = String(value);
+                    } else if (fieldSchema.type === 'date') {
+                        // Craft expects YYYY-MM-DD string for date type, which we already prepare
+                        properties[propKey] = String(value);
+                    } else if (fieldSchema.type === 'select' || fieldSchema.type === 'multiSelect') {
+                        // Validate against options
+                        const options = fieldSchema.options || [];
+                        const strValue = String(value);
+                        // Case-insensitive match or exact match? API usually requires exact match.
+                        // Let's try to find an exact match, or a case-insensitive one to be helpful.
+                        const validOption = options.find(opt => opt.toLowerCase() === strValue.toLowerCase());
+
+                        if (validOption) {
+                            if (fieldSchema.type === 'select') {
+                                properties[propKey] = validOption;
+                            } else {
+                                // multiSelect expects array
+                                properties[propKey] = [validOption];
+                            }
+                        } else {
+                            // If no match found (e.g. 'To Read' vs 'Waiting'), maybe try mapping common variations?
+                            // For now, if invalid, we skip to avoid API error.
+                            // Specifically handling 'Reading status' default
+                            if (fieldName === 'Reading status' && strValue === 'To Read') {
+                                const waitingOpt = options.find(opt => opt.toLowerCase() === 'waiting');
+                                if (waitingOpt) properties[propKey] = waitingOpt;
+                            }
+                        }
+                    } else if (fieldSchema.type === 'text' || fieldSchema.type === 'richText') {
+                        properties[propKey] = String(value);
+                    } else if (fieldSchema.type === 'multiSelect' || fieldSchema.key === 'tags' || Array.isArray(value)) {
+                        // If schema expects array (like for native 'tags' if that's exposed as array)
+                        // But for 'multiSelect' we handled above.
+                        // The error said "expected: array, code: invalid_type, path: tags".
+                        // If the field type in Craft is actually 'tags' (it might be a specific type or multi-select).
+                        // Let's assume if it expects array, we give it array.
+                        if (Array.isArray(value)) {
+                            properties[propKey] = value;
+                        } else if (typeof value === 'string' && value.includes(',')) {
+                            properties[propKey] = value.split(',').map(s => s.trim());
+                        } else {
+                            properties[propKey] = [String(value)];
+                        }
+                    } else {
+                        // Default fallback
+                        properties[propKey] = value;
                     }
                 };
 
                 // Map known fields (Robust against missing fields in schema)
                 setProp('Authors', creators);
-                setProp('Year', year); // Assuming text or number, string should work for both usually
+                setProp('Year', year); // schema check will convert to number if needed
                 setProp('Journal', journal);
                 setProp('URL', url);
                 setProp('Date added', dateAdded);
-                setProp('Publication type', itemType);
-                // For Tags, if it's a text field, join them. If it's multi-select, might be tricky without options.
-                // Assuming it works as text or we just try sending string
-                setProp('Tags', tags.join(', '));
-                // Also 'Reading status' from CSV - we can set default if needed, or leave empty
-                setProp('Reading status', 'To Read');
+                setProp('Publication type', itemType); // will check valid options
+
+                // Tags: The Zotero tags are array of strings: formattedTags
+                // If Craft field expects array, we pass array. If text, we join.
+                // We need to check schema type for 'Tags'.
+                const tagsSchema = schemaMap['Tags'];
+                if (tagsSchema) {
+                    if (tagsSchema.type === 'text' || tagsSchema.type === 'richText') {
+                        setProp('Tags', tags.join(', '));
+                    } else {
+                        // Expects array (multiSelect or similar)
+                        // Note: Zotero tags might not match Craft select options unless we create them?
+                        // Craft API for 'multiSelect' usually requires options to exist.
+                        // But if it's a special 'tag' type, maybe it allows new ones?
+                        // The error received was "expected array".
+                        // Let's pass the array of strings and hope for the best, or filter if it's strict select.
+                        // If it's strict options, we might filter out all tags...
+                        // Safe bet: if it's multiSelect, we filter. If generic array (unknown type), pass array.
+                        if (tagsSchema.type === 'multiSelect' && tagsSchema.options) {
+                            const validTags = tags.filter(t =>
+                                tagsSchema.options?.some(opt => opt.toLowerCase() === t.replace('#', '').toLowerCase())
+                            );
+                            if (validTags.length > 0) {
+                                properties[tagsSchema.key] = validTags;
+                            }
+                        } else {
+                            // Pass raw array (removing hash for cleanliness if sticking into a tag field?)
+                            // User wanted #tag_name format in body, maybe simpler tags in properties?
+                            // Let's keep #tag_name to be consistent with body for now.
+                            properties[tagsSchema.key] = tags;
+                        }
+                    }
+                }
+
+                // Also 'Reading status'
+                // The error said valid options: Waiting, Next up, In progress, Done.
+                setProp('Reading status', 'To Read'); // Will be mapped to 'Waiting' by setProp logic above
 
                 // 5. Transform to Markdown
                 const markdownBody = `
