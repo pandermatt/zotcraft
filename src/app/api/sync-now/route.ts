@@ -105,12 +105,18 @@ export async function POST(request: Request) {
                                 properties[propKey] = [validOption];
                             }
                         } else {
-                            // If no match found (e.g. 'To Read' vs 'Waiting'), maybe try mapping common variations?
-                            // For now, if invalid, we skip to avoid API error.
-                            // Specifically handling 'Reading status' default
+                            // If no match found (e.g. 'To Read' vs 'Waiting'), check for manual mapping
                             if (fieldName === 'Reading status' && strValue === 'To Read') {
                                 const waitingOpt = options.find(opt => opt.toLowerCase() === 'waiting');
-                                if (waitingOpt) properties[propKey] = waitingOpt;
+                                if (waitingOpt) {
+                                    properties[propKey] = waitingOpt;
+                                } else {
+                                    // Skip invalid option to prevent 400 error
+                                    console.warn(`Skipping invalid option '${strValue}' for field '${fieldName}'`);
+                                }
+                            } else {
+                                // Skip invalid option to prevent 400 error
+                                console.warn(`Skipping invalid option '${strValue}' for field '${fieldName}'. Valid options: ${options.join(', ')}`);
                             }
                         }
                     } else if (fieldSchema.type === 'text' || fieldSchema.type === 'richText') {
@@ -152,24 +158,36 @@ export async function POST(request: Request) {
                     } else {
                         // Expects array (multiSelect or similar)
                         // Note: Zotero tags might not match Craft select options unless we create them?
-                        // Craft API for 'multiSelect' usually requires options to exist.
-                        // But if it's a special 'tag' type, maybe it allows new ones?
-                        // The error received was "expected array".
-                        // Let's pass the array of strings and hope for the best, or filter if it's strict select.
-                        // If it's strict options, we might filter out all tags...
-                        // Safe bet: if it's multiSelect, we filter. If generic array (unknown type), pass array.
-                        if (tagsSchema.type === 'multiSelect' && tagsSchema.options) {
+                        if (tagsSchema.type === 'multiSelect' && tagsSchema.options && tagsSchema.options.length > 0) {
                             const validTags = tags.filter(t =>
                                 tagsSchema.options?.some(opt => opt.toLowerCase() === t.replace('#', '').toLowerCase())
                             );
+
+                            // Only set property if we have valid tags, or if we want to send what matches
                             if (validTags.length > 0) {
-                                properties[tagsSchema.key] = validTags;
+                                // Map back to the exact option string from schema to be safe
+                                const mappedTags = validTags.map(t => {
+                                    return tagsSchema.options?.find(opt => opt.toLowerCase() === t.replace('#', '').toLowerCase()) || t;
+                                });
+                                properties[tagsSchema.key] = mappedTags;
                             }
+                            // If no tags match options, we skip setting the property to avoid error
                         } else {
-                            // Pass raw array (removing hash for cleanliness if sticking into a tag field?)
-                            // User wanted #tag_name format in body, maybe simpler tags in properties?
-                            // Let's keep #tag_name to be consistent with body for now.
-                            properties[tagsSchema.key] = tags;
+                            // If it's not a restricted multiSelect (or options are empty?), assume we can pass array
+                            // But wait, the previous error for Journal said "Valid options: ." meaning empty list?
+                            // If options are strict and empty, we can't send anything.
+
+                            // Logic: If it's multiSelect, we should strictly check options if they exist.
+                            // If options are empty/undefined, maybe it allows creation? The error for Journal implies strictness.
+                            // Let's assume strictness for safety.
+                            if (tagsSchema.type === 'multiSelect') {
+                                // If no options defined, likely can't add new ones via API this way without "create option" endpoint?
+                                // Better to skip tags than fail item creation.
+                                console.warn(`Skipping tags for multiSelect field '${tagsSchema.key}' as strict matching is required.`);
+                            } else {
+                                // Generic array or tag type
+                                properties[tagsSchema.key] = tags;
+                            }
                         }
                     }
                 }
