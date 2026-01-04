@@ -41,6 +41,7 @@ export default function Home() {
   const [testResult, setTestResult] = useState<{ zotero: boolean; craft: boolean } | null>(null);
 
   const [zoteroCollections, setZoteroCollections] = useState<ZoteroCollection[]>([]);
+  const [zoteroGroupCollections, setZoteroGroupCollections] = useState<{ groupId: string; groupName: string; collections: ZoteroCollection[] }[]>([]);
   const [craftCollections, setCraftCollections] = useState<CraftCollection[]>([]);
   const [loadingZoteroCols, setLoadingZoteroCols] = useState(false);
   const [loadingCraftCols, setLoadingCraftCols] = useState(false);
@@ -76,19 +77,34 @@ export default function Home() {
     }));
   };
 
-  // Fetch Zotero Collections
+  // Fetch Zotero Collections (User + Groups)
   const fetchZoteroCollections = useCallback(async () => {
     if (!config.zotero.userId || !config.zotero.apiKey) return;
     setLoadingZoteroCols(true);
     try {
-      const res = await fetch('/api/zotero/collections', {
+      // Fetch user collections
+      const userRes = await fetch('/api/zotero/collections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config.zotero),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setZoteroCollections(data);
+      
+      // Fetch group libraries
+      const groupsRes = await fetch('/api/zotero/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.zotero),
+      });
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setZoteroCollections(userData);
+      }
+
+      if (groupsRes.ok) {
+        const groupData = await groupsRes.json();
+        console.log('Fetched Zotero group collections:', groupData);
+        setZoteroGroupCollections(groupData);
       }
     } catch (e) {
       console.error(e);
@@ -293,15 +309,41 @@ export default function Home() {
               />
 
               <div className="flex gap-2">
-                {zoteroCollections.length > 0 ? (
+                {(zoteroCollections.length > 0 || zoteroGroupCollections.length > 0) ? (
                   <select
                     className="w-full p-2 border rounded text-sm bg-white"
                     value={config.zotero.collectionId}
                     onChange={(e) => handleChange('zotero', 'collectionId', e.target.value)}
                   >
                     <option value="">Select Collection</option>
-                    {zoteroCollections.map(col => (
-                      <option key={col.key} value={col.key}>{col.data.name}</option>
+                    
+                    {/* User Collections */}
+                    {zoteroCollections.length > 0 && (
+                      <optgroup label="📚 My Library">
+                        {zoteroCollections.map(col => (
+                          <option key={col.key} value={col.key}>{col.data.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    
+                    {/* Group Collections */}
+                    {zoteroGroupCollections.map(group => (
+                      <optgroup key={group.groupId} label={`👥 ${group.groupName}`}>
+                        <option value={`group:${group.groupId}`}>
+                          📁 Entire Library
+                        </option>
+                        {group.collections.length > 0 ? (
+                          group.collections.map(col => (
+                            <option key={col.key} value={`group:${group.groupId}:${col.key}`}>
+                              {col.data.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option disabled value="">
+                            No collections found
+                          </option>
+                        )}
+                      </optgroup>
                     ))}
                   </select>
                 ) : (

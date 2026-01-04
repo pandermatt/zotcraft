@@ -36,7 +36,25 @@ export class ZoteroClient {
         try {
             // Fetch top items from the collection, sorted by modification date desc
             // We rely on the user to provide the collection ID
-            const url = `${ZOTERO_API_BASE}/users/${this.config.userId}/collections/${this.config.collectionId}/items/top?limit=${limit}&sort=dateModified&direction=desc`;
+            let url: string;
+
+            // Check if this is a group library selection
+            if (this.config.collectionId.startsWith('group:')) {
+                const parts = this.config.collectionId.split(':');
+                const groupId = parts[1];
+                const collectionKey = parts[2]; // May be undefined for entire library
+
+                if (collectionKey) {
+                    // Fetch from specific group collection
+                    url = `${ZOTERO_API_BASE}/groups/${groupId}/collections/${collectionKey}/items/top?limit=${limit}&sort=dateModified&direction=desc`;
+                } else {
+                    // Fetch entire group library
+                    url = `${ZOTERO_API_BASE}/groups/${groupId}/items/top?limit=${limit}&sort=dateModified&direction=desc`;
+                }
+            } else {
+                // Fetch from user library collection
+                url = `${ZOTERO_API_BASE}/users/${this.config.userId}/collections/${this.config.collectionId}/items/top?limit=${limit}&sort=dateModified&direction=desc`;
+            }
 
             const response = await fetch(url, {
                 headers: this.getHeaders(),
@@ -70,6 +88,60 @@ export class ZoteroClient {
             return await response.json();
         } catch (error) {
             console.error('Error fetching Zotero collections:', error);
+            throw error;
+        }
+    }
+
+    async getGroups(): Promise<Array<{ groupId: string; groupName: string; collections: import('@/types/zotero').ZoteroCollection[] }>> {
+        try {
+            // Fetch user's groups
+            const groupsResponse = await fetch(
+                `${ZOTERO_API_BASE}/users/${this.config.userId}/groups`,
+                {
+                    headers: this.getHeaders(),
+                }
+            );
+
+            if (!groupsResponse.ok) {
+                throw new Error(`Failed to fetch groups: ${groupsResponse.statusText}`);
+            }
+
+            const groups = await groupsResponse.json();
+
+            // Fetch collections for each group
+            const groupsWithCollections = await Promise.all(
+                groups.map(async (group: any) => {
+                    try {
+                        const collectionsResponse = await fetch(
+                            `${ZOTERO_API_BASE}/groups/${group.id}/collections`,
+                            {
+                                headers: this.getHeaders(),
+                            }
+                        );
+
+                        const collections = collectionsResponse.ok
+                            ? await collectionsResponse.json()
+                            : [];
+
+                        return {
+                            groupId: group.id.toString(),
+                            groupName: group.data.name,
+                            collections,
+                        };
+                    } catch (error: any) {
+                        console.error(`Error fetching collections for group ${group.id}:`, error);
+                        return {
+                            groupId: group.id.toString(),
+                            groupName: group.data.name,
+                            collections: [],
+                        };
+                    }
+                })
+            );
+
+            return groupsWithCollections;
+        } catch (error) {
+            console.error('Error fetching Zotero groups:', error);
             throw error;
         }
     }
